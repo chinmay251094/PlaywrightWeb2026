@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
+<!--
+    FULL REGRESSION SUITE — nightly / pre-release execution
+    Run: mvn test -P regression
+    Or:  mvn test -Dtestng.suite=testng-regression.xml -Dthread.count=6
+
+    Cross-browser: run this suite three times with different browser profiles:
+      mvn test -P regression,chromium
+      mvn test -P regression,firefox
+      mvn test -P regression,webkit
+-->
+<suite name="Playwright Hybrid Framework — Regression Suite"
+       parallel="methods"
+       thread-count="4"
+       verbose="1">
+
+    <listeners>
+        <listener class-name="com.automation.listeners.CustomReportListener"/>
+        <listener class-name="com.automation.listeners.TestNGListener"/>
+    </listeners>
+
+    <!-- browser / headless controlled per-row in TestData.xlsx -->
+
+    <test name="Regression — Authentication">
+        <groups>
+            <run>
+                <include name="regression"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.LoginTest"/>
+            <class name="com.automation.tests.AccountTest"/>
+        </classes>
+    </test>
+
+    <test name="Regression — Store and Search">
+        <groups>
+            <run>
+                <include name="regression"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.SearchTest"/>
+        </classes>
+    </test>
+
+    <test name="Regression — Cart and Checkout">
+        <groups>
+            <run>
+                <include name="regression"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.CartTest"/>
+        </classes>
+    </test>
+
+    <test name="Regression — Navigation">
+        <groups>
+            <run>
+                <include name="regression"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.NavigationTest"/>
+        </classes>
+    </test>
+
+</suite>

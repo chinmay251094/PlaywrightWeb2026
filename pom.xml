@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.automation</groupId>
+    <artifactId>playwright-testng-hybrid</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>Playwright TestNG Hybrid Framework</name>
+    <description>Enterprise-grade web automation hybrid framework using Playwright Java and TestNG</description>
+
+    <properties>
+        <!-- Java version -->
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Library versions -->
+        <playwright.version>1.49.0</playwright.version>
+        <testng.version>7.9.0</testng.version>
+        <log4j2.version>2.23.1</log4j2.version>
+        <apache.poi.version>5.3.0</apache.poi.version>
+        <jackson.version>2.17.2</jackson.version>
+        <assertj.version>3.26.3</assertj.version>
+
+        <!-- Maven plugin versions -->
+        <maven.surefire.version>3.2.5</maven.surefire.version>
+        <maven.compiler.version>3.13.0</maven.compiler.version>
+
+        <!-- Runtime-overridable defaults (override via -D or Maven profiles) -->
+        <env>qa</env>
+        <browser>chromium</browser>
+        <headless>true</headless>
+        <parallel>methods</parallel>
+        <thread.count>4</thread.count>
+        <testng.suite>testng.xml</testng.suite>
+    </properties>
+
+    <dependencies>
+        <!-- ═══════════════════════════════════════════════════════
+             PLAYWRIGHT — browser automation engine
+             ═══════════════════════════════════════════════════════ -->
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>${playwright.version}</version>
+        </dependency>
+
+        <!-- ═══════════════════════════════════════════════════════
+             TESTNG — test orchestration and lifecycle management
+             ═══════════════════════════════════════════════════════ -->
+        <dependency>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+            <version>${testng.version}</version>
+        </dependency>
+
+        <!-- ═══════════════════════════════════════════════════════
+             LOG4J2 — structured application logging
+             ═══════════════════════════════════════════════════════ -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j2.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>${log4j2.version}</version>
+        </dependency>
+        <!-- SLF4J 1.x bridge — routes third-party SLF4J calls through Log4j2.
+             Playwright and most test libraries ship with slf4j-api 1.7.x;
+             log4j-slf4j-impl (1.x bridge) must be used — NOT log4j-slf4j2-impl. -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>${log4j2.version}</version>
+        </dependency>
+
+        <!-- ═══════════════════════════════════════════════════════
+             APACHE POI — Excel test data reading/writing
+             ═══════════════════════════════════════════════════════ -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+            <version>${apache.poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${apache.poi.version}</version>
+        </dependency>
+
+        <!-- ═══════════════════════════════════════════════════════
+             JACKSON — JSON config and response parsing
+             ═══════════════════════════════════════════════════════ -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- ═══════════════════════════════════════════════════════
+             ASSERTJ — fluent, readable assertions
+             ═══════════════════════════════════════════════════════ -->
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven.compiler.version}</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+
+            <!-- Surefire — drives TestNG execution -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven.surefire.version}</version>
+                <configuration>
+                    <suiteXmlFiles>
+                        <suiteXmlFile>${testng.suite}</suiteXmlFile>
+                    </suiteXmlFiles>
+                    <!-- System properties from Maven properties/CLI -D flags -->
+                    <systemPropertyVariables>
+                        <env>${env}</env>
+                        <browser>${browser}</browser>
+                        <headless>${headless}</headless>
+                    </systemPropertyVariables>
+                    <testFailureIgnore>false</testFailureIgnore>
+                </configuration>
+            </plugin>
+        </plugins>
+
+        <!-- Enable property filtering so ${env} in properties files is resolved -->
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+                <filtering>false</filtering>
+            </testResource>
+        </testResources>
+    </build>
+
+    <!-- ═════════════════════════════════════════════════════════════
+         MAVEN PROFILES
+         Usage: mvn test -P qa,smoke,firefox
+         ═════════════════════════════════════════════════════════════ -->
+    <profiles>
+        <!-- Environment profiles -->
+        <profile>
+            <id>qa</id>
+            <activation><activeByDefault>true</activeByDefault></activation>
+            <properties><env>qa</env></properties>
+        </profile>
+        <profile>
+            <id>uat</id>
+            <properties><env>uat</env></properties>
+        </profile>
+        <profile>
+            <id>prod</id>
+            <properties><env>prod</env></properties>
+        </profile>
+
+        <!-- Suite profiles -->
+        <profile>
+            <id>smoke</id>
+            <properties><testng.suite>testng-smoke.xml</testng.suite></properties>
+        </profile>
+        <profile>
+            <id>regression</id>
+            <properties><testng.suite>testng-regression.xml</testng.suite></properties>
+        </profile>
+
+        <!-- Browser profiles -->
+        <profile>
+            <id>firefox</id>
+            <properties><browser>firefox</browser></properties>
+        </profile>
+        <profile>
+            <id>webkit</id>
+            <properties><browser>webkit</browser></properties>
+        </profile>
+        <profile>
+            <id>headed</id>
+            <properties><headless>false</headless></properties>
+        </profile>
+    </profiles>
+</project>

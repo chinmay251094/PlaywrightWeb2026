@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
+<!--
+╔══════════════════════════════════════════════════════════════════════╗
+║            IntelliJ IDEA — Local Development Suite                   ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  HOW TO RUN IN INTELLIJ:                                             ║
+║  1. Right-click this file in the Project panel                       ║
+║  2. Select "Run '<suite name>'"                                      ║
+║                                                                      ║
+║  OR — create a persistent Run Configuration:                         ║
+║  Run ▸ Edit Configurations ▸ + ▸ TestNG                             ║
+║    Suite:             (path to this file)                            ║
+║    Working directory: $MODULE_WORKING_DIR$                           ║
+║    JVM options:       -Denv=qa  (optional — defaults to qa)          ║
+║                                                                      ║
+║  KEY DIFFERENCES FROM testng.xml (CI suite):                        ║
+║  • headless=false    — browser window is visible for debugging       ║
+║  • parallel=false    — one test at a time; easy to step through      ║
+║  • thread-count=1    — single thread keeps console output in order   ║
+║  • verbose=2         — extra TestNG output in the IDEA console       ║
+╚══════════════════════════════════════════════════════════════════════╝
+-->
+<suite name="Playwright Hybrid — IntelliJ Local Suite"
+       parallel="false"
+       thread-count="1"
+       verbose="2">
+
+    <listeners>
+        <listener class-name="com.automation.listeners.CustomReportListener"/>
+        <listener class-name="com.automation.listeners.TestNGListener"/>
+    </listeners>
+
+    <!--
+        Browser and headless mode are now controlled per-row in the
+        "TestSuite" sheet of TestData.xlsx — no XML parameters needed.
+        To run headed: set headless=false in the relevant Excel rows.
+        To switch browser: set browser=firefox|webkit in the Excel rows.
+    -->
+
+    <!-- ────────────────────────────────────────────────────────────────
+         SMOKE — run only the critical-path tests first.
+         Comment out the <groups> block to run ALL tests in each class.
+         ──────────────────────────────────────────────────────────────── -->
+    <test name="Smoke — Authentication" enabled="true">
+        <groups>
+            <run>
+                <include name="smoke"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.LoginTest"/>
+        </classes>
+    </test>
+
+    <test name="Smoke — Navigation" enabled="true">
+        <groups>
+            <run>
+                <include name="smoke"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.NavigationTest"/>
+        </classes>
+    </test>
+
+    <test name="Smoke — Search" enabled="true">
+        <groups>
+            <run>
+                <include name="smoke"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.SearchTest"/>
+        </classes>
+    </test>
+
+    <test name="Smoke — Cart" enabled="true">
+        <groups>
+            <run>
+                <include name="smoke"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.CartTest"/>
+        </classes>
+    </test>
+
+    <test name="Smoke — Account" enabled="true">
+        <groups>
+            <run>
+                <include name="smoke"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.AccountTest"/>
+        </classes>
+    </test>
+
+    <!-- ────────────────────────────────────────────────────────────────
+         REGRESSION — uncomment to run the full suite locally.
+         Tip: set enabled="true" on regression blocks and enabled="false"
+         on the smoke blocks above to switch modes without editing groups.
+         ──────────────────────────────────────────────────────────────── -->
+    <test name="Regression — Authentication" enabled="false">
+        <classes>
+            <class name="com.automation.tests.LoginTest"/>
+            <class name="com.automation.tests.AccountTest"/>
+        </classes>
+    </test>
+
+    <test name="Regression — Store and Search" enabled="false">
+        <classes>
+            <class name="com.automation.tests.SearchTest"/>
+        </classes>
+    </test>
+
+    <test name="Regression — Cart and Checkout" enabled="false">
+        <classes>
+            <class name="com.automation.tests.CartTest"/>
+        </classes>
+    </test>
+
+    <test name="Regression — Navigation" enabled="false">
+        <classes>
+            <class name="com.automation.tests.NavigationTest"/>
+        </classes>
+    </test>
+
+</suite>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
+<!--
+    FULL REGRESSION SUITE
+    Run: mvn test  (default)
+    Or:  mvn test -Dbrowser=firefox -Dheadless=true -Dthread.count=4
+-->
+<suite name="Playwright Hybrid Framework — Full Suite"
+       parallel="methods"
+       thread-count="4"
+       verbose="1">
+
+    <!-- Listeners wired here so they fire for every <test> block -->
+    <listeners>
+        <listener class-name="com.automation.listeners.CustomReportListener"/>
+        <listener class-name="com.automation.listeners.TestNGListener"/>
+    </listeners>
+
+    <!-- Browser and headless are controlled per-row in TestData.xlsx (TestSuite sheet).
+         No XML parameters needed — BaseTest reads them from the DataProvider map. -->
+
+    <!-- ──────────────────────────────────────────────────────────────
+         Test: Authentication
+         ────────────────────────────────────────────────────────────── -->
+    <test name="Authentication Tests">
+        <classes>
+            <class name="com.automation.tests.LoginTest"/>
+            <class name="com.automation.tests.AccountTest"/>
+        </classes>
+    </test>
+
+    <!-- ──────────────────────────────────────────────────────────────
+         Test: Store & Search
+         ────────────────────────────────────────────────────────────── -->
+    <test name="Store and Search Tests">
+        <classes>
+            <class name="com.automation.tests.SearchTest"/>
+        </classes>
+    </test>
+
+    <!-- ──────────────────────────────────────────────────────────────
+         Test: Cart & Checkout
+         ────────────────────────────────────────────────────────────── -->
+    <test name="Cart and Checkout Tests">
+        <classes>
+            <class name="com.automation.tests.CartTest"/>
+        </classes>
+    </test>
+
+    <!-- ──────────────────────────────────────────────────────────────
+         Test: Navigation
+         ────────────────────────────────────────────────────────────── -->
+    <test name="Navigation Tests">
+        <classes>
+            <class name="com.automation.tests.NavigationTest"/>
+        </classes>
+    </test>
+
+</suite>

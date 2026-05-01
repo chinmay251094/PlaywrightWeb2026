@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+
+<!--
+    SMOKE SUITE — fast pre-deploy gate check (~5 min)
+    Run: mvn test -P smoke
+    Or:  mvn test -Dtestng.suite=testng-smoke.xml
+-->
+<suite name="Playwright Hybrid Framework — Smoke Suite"
+       parallel="methods"
+       thread-count="2"
+       verbose="1">
+
+    <listeners>
+        <listener class-name="com.automation.listeners.CustomReportListener"/>
+        <listener class-name="com.automation.listeners.TestNGListener"/>
+    </listeners>
+
+    <!-- browser / headless controlled per-row in TestData.xlsx -->
+
+    <test name="Smoke Tests">
+        <groups>
+            <run>
+                <include name="smoke"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="com.automation.tests.LoginTest"/>
+            <class name="com.automation.tests.SearchTest"/>
+            <class name="com.automation.tests.CartTest"/>
+            <class name="com.automation.tests.NavigationTest"/>
+            <class name="com.automation.tests.AccountTest"/>
+        </classes>
+    </test>
+
+</suite>
