@@ -12,6 +12,165 @@ The pipeline is optimised for three outcomes:
 
 ---
 
+## What Was Done — Step by Step (Start Here If You're New to GitHub Actions)
+
+This section explains exactly what was built and why, in plain language. No prior CI/CD knowledge needed.
+
+---
+
+### Background — How GitHub Actions Works
+
+GitHub Actions is a built-in automation system inside GitHub. The idea is simple:
+
+> "When something happens to my repository (e.g. someone pushes code), automatically run a series of commands on a machine that GitHub spins up for me."
+
+You tell GitHub what to do by placing a `.yml` file inside a special folder: `.github/workflows/`. GitHub reads that file automatically — no registration, no setup, no server to manage. The machine GitHub spins up is called a **runner** (think: a fresh Linux laptop that exists only for the duration of your job, then disappears).
+
+---
+
+### Step 1 — Modified `pom.xml`
+
+**File:** [pom.xml](pom.xml)
+
+**What was added:** A single plugin entry — `exec-maven-plugin`.
+
+**Why:** Playwright stores its browser binaries (Chrome, Firefox, WebKit) separately from the Java library. Before tests can run on any machine (including GitHub's runners), those browsers need to be downloaded and installed. The command to do that is:
+
+```bash
+mvn exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install --with-deps"
+```
+
+This command uses the `exec-maven-plugin`. Without declaring it in `pom.xml`, Maven doesn't know what `exec:java` means and throws an error. Adding the plugin is what makes browser installation a first-class Maven operation.
+
+**In simple terms:** We told Maven "you are allowed to run Java programs directly — specifically, the Playwright browser installer."
+
+---
+
+### Step 2 — Created `.github/workflows/ci.yml`
+
+**File:** [.github/workflows/ci.yml](.github/workflows/ci.yml)
+
+**What it is:** The main CI pipeline. This is the file GitHub reads and acts on automatically.
+
+**When it runs:**
+- Every time you push code to `main` or `develop`
+- Every time you open a Pull Request targeting those branches
+- Manually, whenever you click "Run workflow" in the GitHub Actions UI
+
+**What it does, in order:**
+
+1. GitHub spins up a fresh Ubuntu Linux machine
+2. It checks out your code (like a `git clone`)
+3. It installs Java 17
+4. It downloads all Maven dependencies (and caches them so the next run is faster)
+5. It downloads the Playwright browser binaries (and caches those too)
+6. It runs the **smoke test suite** — a small, fast set of tests to check that the core flows work
+7. If tests pass and the push was to `main`, it then runs the **full regression suite** across all three browsers (Chromium, Firefox, WebKit) in parallel
+8. It uploads the test reports and screenshots as downloadable artifacts
+
+**In simple terms:** Every time you push code, GitHub automatically checks whether your tests pass. You don't have to run anything manually.
+
+---
+
+### Step 3 — Created `.github/workflows/nightly.yml`
+
+**File:** [.github/workflows/nightly.yml](.github/workflows/nightly.yml)
+
+**What it is:** A scheduled pipeline that runs automatically every night at 2 AM (UTC) without anyone pushing code.
+
+**What it does:** Runs the full regression suite across all three browsers (Chromium, Firefox, WebKit) in parallel, and posts a summary table showing how many tests passed and failed per browser.
+
+**Why it exists:** During the day you want fast feedback (smoke only). But once a day you want to know the full picture — did anything break across all browsers? The nightly run gives you that without slowing down every push.
+
+**In simple terms:** Even if nobody touches the code, GitHub will still run your full test suite every night and tell you if something broke.
+
+---
+
+### Step 4 — Created `Dockerfile`
+
+**File:** [Dockerfile](Dockerfile)
+
+**What it is:** A recipe for building a self-contained Docker image that has everything needed to run your tests — Java, Maven, and all three Playwright browsers — pre-installed.
+
+**Why it exists:** GitHub Actions runners work fine for CI, but sometimes you want to run tests locally in an environment that exactly matches CI, or you want to run tests on any machine without setting up Java/Maven/browsers manually. The Docker image solves that.
+
+**How the layers are structured (this matters for speed):**
+```
+Layer 1 — Base OS + Maven         (rebuilt only if the base image changes)
+Layer 2 — Maven dependencies      (rebuilt only if pom.xml changes)
+Layer 3 — Playwright browsers     (rebuilt only if Playwright version changes)
+Layer 4 — Your compiled tests     (rebuilt on every code change — fast, ~5 MB)
+```
+Because Docker caches each layer independently, a typical rebuild after a code change only re-runs Layer 4, which takes about 15 seconds.
+
+**In simple terms:** Package everything your tests need into one box. Run that box anywhere — your laptop, a colleague's machine, a server — and get identical results every time.
+
+---
+
+### Step 5 — Created `.dockerignore`
+
+**File:** [.dockerignore](.dockerignore)
+
+**What it is:** A list of files and folders that should NOT be copied into the Docker image.
+
+**Why it exists:** Without it, Docker would copy your entire project folder into the image — including `target/` (compiled classes), `test-output/` (old reports), `.idea/` (IDE settings), and `.git/` (the entire git history). This makes the image unnecessarily large and slow to build.
+
+**In simple terms:** The `.dockerignore` file is to Docker what `.gitignore` is to Git — it tells Docker what to ignore.
+
+---
+
+### Step 6 — Created `scripts/run-tests.sh`
+
+**File:** [scripts/run-tests.sh](scripts/run-tests.sh)
+
+**What it is:** A convenience shell script that wraps the Docker commands so you don't have to remember long `docker run` commands.
+
+**Instead of typing this every time:**
+```bash
+docker build -t playwright-tests . && docker run --rm --shm-size=2gb \
+  -v "$(pwd)/test-output:/app/test-output" playwright-tests \
+  test -P smoke,qa -Dbrowser=firefox -Dheadless=true
+```
+
+**You just type:**
+```bash
+./scripts/run-tests.sh -s smoke -b firefox
+```
+
+It also validates your inputs (e.g. catches a typo like `-b crome` before Docker even starts) and prints a clear summary of what it's about to run.
+
+**In simple terms:** A shortcut script so running tests via Docker is a single readable command.
+
+---
+
+### How All the Pieces Connect
+
+```
+Your code (Java + TestNG)
+        │
+        │  you push to GitHub
+        ▼
+.github/workflows/ci.yml          ← GitHub reads this automatically
+        │
+        ├─ downloads Java 17
+        ├─ downloads Maven deps (uses pom.xml — including exec-maven-plugin)
+        ├─ downloads Playwright browsers
+        ├─ runs smoke tests
+        └─ (on main merge) runs regression on 3 browsers in parallel
+
+.github/workflows/nightly.yml     ← GitHub runs this every night at 2 AM
+        └─ runs full regression on 3 browsers, posts summary
+
+Dockerfile                        ← for running locally via Docker
+        └─ same environment as CI, packaged into one image
+
+scripts/run-tests.sh              ← shortcut to use the Docker image
+```
+
+Every piece has one job. The `.yml` files are the brain (they decide when and what to run). `pom.xml` gives Maven the ability to install browsers. The `Dockerfile` makes the environment portable. The script makes Docker easy to use.
+
+---
+
 ## Architecture
 
 ### Key design decisions
