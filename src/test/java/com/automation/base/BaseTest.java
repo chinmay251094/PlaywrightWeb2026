@@ -56,14 +56,17 @@ public abstract class BaseTest {
         String  browser  = config.getBrowser();
         boolean headless = config.isHeadless();
 
-        // Override from Excel row when available
+        // Override from Excel row when available.
+        // Exception: if -Dheadless was passed explicitly on the command line (e.g. by CI),
+        // that value wins — Excel cannot force headed mode on a headless server.
+        boolean headlessExplicit = System.getProperty("headless") != null;
         if (params != null && params.length > 0 && params[0] instanceof Map<?, ?> raw) {
             @SuppressWarnings("unchecked")
             Map<String, String> data = (Map<String, String>) raw;
             String b = data.get("browser");
             String h = data.get("headless");
-            if (b != null && !b.isBlank()) browser  = b;
-            if (h != null && !h.isBlank()) headless = Boolean.parseBoolean(h);
+            if (b != null && !b.isBlank()) browser = b;
+            if (h != null && !h.isBlank() && !headlessExplicit) headless = Boolean.parseBoolean(h);
         }
 
         log.info("Setting up — browser: {}, headless: {}, env: {}",
