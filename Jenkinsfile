@@ -111,7 +111,20 @@ pipeline {
             }
         }
 
-        // ── Stage 4: Smoke Tests ─────────────────────────────────────────────
+        // ── Stage 4: Generate Test Data ──────────────────────────────────────
+        // TestData.xlsx is excluded from git (it is a generated artifact).
+        // This stage runs ExcelDataGenerator to produce it before tests run.
+        stage('Generate Test Data') {
+            steps {
+                sh '''
+                    mvn -q --no-transfer-progress test-compile exec:java \
+                      -Dexec.classpathScope=test \
+                      -Dexec.mainClass=com.automation.utils.ExcelDataGenerator
+                '''
+            }
+        }
+
+        // ── Stage 5: Smoke Tests ─────────────────────────────────────────────
         // Runs on every branch, every build — fast sanity gate (~3–5 min)
         stage('Smoke Tests') {
             steps {
