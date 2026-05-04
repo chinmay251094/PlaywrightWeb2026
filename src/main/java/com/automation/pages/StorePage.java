@@ -28,6 +28,7 @@ public class StorePage extends BasePage {
     private static final String NO_PRODUCTS_NOTICE    = ".woocommerce-info";
     private static final String PAGINATION_NEXT       = "a.next";
     private static final String PAGINATION_PREV       = "a.prev";
+    private static final String SEARCH_FIELD          = ".search-field";
 
     public StorePage(Page page) {
         super(page);
@@ -39,6 +40,20 @@ public class StorePage extends BasePage {
     public StorePage load(String storeUrl) {
         navigateTo(storeUrl);
         return this;
+    }
+
+    /**
+     * Fills the first .search-field on the store page and submits with ENTER.
+     * The store page exposes the search widget inline — no icon toggle needed.
+     */
+    @Override
+    public void searchFor(String query) {
+        log.info("Searching from store page for: '{}'", query);
+        Locator input = page.locator(SEARCH_FIELD).first();
+        waitUtils.waitForVisible(input);
+        input.fill(query);
+        input.press("Enter");
+        waitForPageLoad();
     }
 
     /**

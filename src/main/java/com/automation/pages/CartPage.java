@@ -22,7 +22,7 @@ public class CartPage extends BasePage {
     private static final String ITEM_PRICE         = ".product-price .amount";
     private static final String ITEM_SUBTOTAL      = ".product-subtotal .amount";
     private static final String REMOVE_ITEM_BTN    = ".product-remove a.remove";
-    private static final String CART_TOTAL         = ".cart-totals .order-total .amount";
+    private static final String CART_TOTAL         = ".order-total [data-title='Total']";
     private static final String CART_SUBTOTAL      = ".cart-totals .cart-subtotal .amount";
     private static final String UPDATE_CART_BTN    = "button[name='update_cart'], [name='update_cart']";
     private static final String CHECKOUT_BTN       = ".wc-proceed-to-checkout a.checkout-button";

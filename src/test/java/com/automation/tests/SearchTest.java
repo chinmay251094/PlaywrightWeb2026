@@ -30,8 +30,11 @@ public class SearchTest extends BaseTest {
         String expectedProduct = data.getOrDefault("expectedProduct", "");
         boolean expectResults  = Boolean.parseBoolean(data.getOrDefault("expectSearchResults", "true"));
 
+        step("Navigate to store page.");
+        StorePage store = homePage.navigateToStore();
+
         step("Search for: '" + searchTerm + "'.");
-        homePage.searchFor(searchTerm);
+        store.searchFor(searchTerm);
 
         StorePage results = on(StorePage.class);
         SoftAssertions soft = new SoftAssertions();

@@ -23,7 +23,7 @@ public class AccountPage extends BasePage {
     private static final String NAV_LOGOUT         = ".woocommerce-MyAccount-navigation-link--customer-logout a";
 
     // ─── Dashboard content ────────────────────────────────────────────────────
-    private static final String WELCOME_MESSAGE    = ".woocommerce-MyAccount-content p:first-child";
+    private static final String WELCOME_MESSAGE    = ".woocommerce-MyAccount-content p";
     private static final String EDIT_DETAILS_FORM  = ".woocommerce-EditAccountForm";
     private static final String FIRST_NAME_INPUT   = "#account_first_name";
     private static final String LAST_NAME_INPUT    = "#account_last_name";
@@ -88,11 +88,11 @@ public class AccountPage extends BasePage {
 
     /** True when the My Account navigation sidebar is present — confirms auth state. */
     public boolean isDashboardVisible() {
-        return page.locator(NAV_MENU).count() > 0 && page.locator(NAV_MENU).isVisible();
+        return page.locator(NAV_MENU).count() > 0 && page.locator(NAV_MENU).first().isVisible();
     }
 
     public String getWelcomeMessage() {
-        Locator msg = page.locator(WELCOME_MESSAGE);
+        Locator msg = page.locator(WELCOME_MESSAGE).first();
         return msg.count() > 0 ? msg.textContent().trim() : "";
     }
 
