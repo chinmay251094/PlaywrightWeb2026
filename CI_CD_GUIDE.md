@@ -130,6 +130,186 @@ mvn test -P smoke,qa -DAPP_USERNAME="${APP_USERNAME}" -DAPP_PASSWORD="${APP_PASS
 
 ---
 
+## Verifying Your First Run
+
+Follow this sequence after pushing the repository to GitHub for the first time.
+
+### Step 1 — Confirm the remote is GitHub
+
+The workflows only activate when the repo is hosted on GitHub. Verify:
+
+```bash
+git remote -v
+# Expected output:
+# origin  https://github.com/<your-username>/<repo>.git (fetch)
+# origin  https://github.com/<your-username>/<repo>.git (push)
+```
+
+If the remote is a local path or another host, create a repo on GitHub and re-add the remote:
+
+```bash
+git remote add origin https://github.com/<your-username>/<repo>.git
+git push -u origin main
+```
+
+---
+
+### Step 2 — Enable GitHub Actions
+
+1. Go to your repo on GitHub.com.
+2. Click the **Actions** tab.
+3. If you see a banner saying _"Workflows aren't being run on this fork"_ or Actions is disabled, click **Enable Actions**.
+
+The two workflow files (`.github/workflows/ci.yml` and `.github/workflows/nightly.yml`) should now appear in the left sidebar.
+
+---
+
+### Step 3 — Trigger your first run without a new push
+
+Both workflows have `workflow_dispatch`, so you can trigger them immediately without making a code change:
+
+1. **Actions → CI — Playwright TestNG** (left sidebar)
+2. Click **Run workflow** (top-right dropdown)
+3. Leave all inputs at their defaults (`suite: smoke`, `browser: chromium`, `environment: qa`)
+4. Click the green **Run workflow** button
+
+A new run appears within a few seconds.
+
+---
+
+### Step 4 — Watch the live log
+
+Click into the run, then click the **smoke** job. You will see each step execute in real time. Here is what each step does and roughly how long it takes on a cold (first) run:
+
+```
+✓ Checkout                                    ~5 s
+✓ Set up JDK 17                               ~15 s
+✓ Cache Playwright browsers    ← MISS         ~5 s   (first run always misses)
+✓ Resolve Maven dependencies   ← MISS         ~90 s  (downloads ~150 MB from Maven Central)
+✓ Install Playwright browsers  ← full install ~120 s (downloads ~300 MB chromium binary + apt packages)
+✓ Run smoke tests                             ~90 s
+✓ Upload HTML report                          ~5 s
+─────────────────────────────────────────────────────
+  Total first run                             ~6–8 min
+
+  Subsequent runs (caches warm):              ~2–3 min
+```
+
+> **First run is always the slowest.** Maven deps and Playwright binaries are both cached after the first run, so every subsequent run benefits from warm caches.
+
+---
+
+### Step 5 — Read the result and download artifacts
+
+Once the run finishes:
+
+- Green checkmark → all smoke tests passed.
+- Red X → at least one test failed. A `smoke-failure-<run-id>` artifact is also uploaded.
+
+Click **Summary** at the top of the run. Scroll to the **Artifacts** section at the bottom:
+
+| Artifact name | Contents | When present |
+|---|---|---|
+| `smoke-report-<run-id>` | `test-output/reports/TestReport.html` | Always (14-day retention) |
+| `smoke-failure-<run-id>` | Screenshots, logs, Surefire XML | Failures only (7-day retention) |
+
+Download the report ZIP, unzip it, and open `TestReport.html` in a browser to see the full ExtentReports output.
+
+---
+
+### Step 6 — Verify the regression matrix trigger
+
+The regression matrix only runs on a **push/merge to `main`**. Test it with an empty commit:
+
+```bash
+git commit --allow-empty -m "chore: verify regression trigger"
+git push origin main
+```
+
+Go to **Actions** — you should see:
+1. The `smoke` job start and pass (~3 min).
+2. Three `Regression — chromium/firefox/webkit` jobs start **in parallel** immediately after smoke passes (~6–8 min each).
+
+All three regression jobs produce separate artifacts (`regression-chromium-<run-id>`, etc.) retained for 30 days.
+
+---
+
+### Step 7 — Verify the nightly workflow (without waiting overnight)
+
+The nightly workflow runs automatically at 02:00 UTC, but you can test it right now:
+
+1. **Actions → Nightly — Cross-Browser Regression** (left sidebar)
+2. Click **Run workflow**
+3. Leave defaults and click **Run workflow**
+
+All three browser jobs run in parallel. When they finish, check the **Summary** page — the nightly workflow posts a markdown results table per browser directly on that page:
+
+```
+Nightly — chromium
+| Tests | Failures | Errors |
+|-------|----------|--------|
+| 42    | 0        | 0      |
+```
+
+---
+
+### What a healthy full run looks like
+
+```
+CI run on merge to main:
+
+  smoke [chromium]      ✓  ~3 min
+  regression
+    chromium            ✓  ~6 min  ─┐
+    firefox             ✓  ~7 min   ├─ parallel
+    webkit              ✓  ~8 min  ─┘
+
+Nightly run:
+
+  nightly-regression
+    chromium            ✓  ~8 min  ─┐
+    firefox             ✓  ~9 min   ├─ parallel
+    webkit              ✓  ~9 min  ─┘
+```
+
+---
+
+### Most likely first-run failure and fix
+
+The most common first-run failure is the AUT (`askomdch.com`) being slow to respond from a CI runner, causing `NETWORKIDLE` timeouts in `BaseTest.setUp()`.
+
+**Symptoms:** `TimeoutError: page.waitForLoadState: Timeout 60000ms exceeded` in the log.
+
+**Fix:** Add timeout overrides to the `Run smoke tests` step in `ci.yml`:
+
+```yaml
+- name: Run smoke tests
+  run: |
+    mvn test -P smoke,qa \
+      -Dbrowser=chromium \
+      -Dheadless=true \
+      -Dpage.load.timeout=90000 \
+      -Ddefault.timeout=45000 \
+      --no-transfer-progress
+```
+
+---
+
+## Branch & Trigger Reference
+
+| Event | Workflow | Jobs triggered |
+|---|---|---|
+| Push to `develop` | `ci.yml` | `smoke` only |
+| Push to `main` | `ci.yml` | `smoke` → `regression` (chromium + firefox + webkit) |
+| Pull request to `main` or `develop` | `ci.yml` | `smoke` only |
+| Manual `workflow_dispatch` | `ci.yml` | `smoke` with selected inputs |
+| Daily cron 02:00 UTC | `nightly.yml` | Full regression (chromium + firefox + webkit) |
+| Manual `workflow_dispatch` | `nightly.yml` | Full regression with selected env/threads |
+
+> **PRs get smoke only** — this is intentional. Running the full 3-browser matrix on every PR would consume ~24 runner-minutes per PR. Smoke is the fast signal that code compiles and core flows work; the full matrix runs only after merge confirms the branch is clean.
+
+---
+
 ## Running Tests
 
 ### Locally (Maven)
@@ -325,6 +505,41 @@ In GitHub Actions this is set to `${{ github.workspace }}/.cache/ms-playwright` 
 ---
 
 ## Troubleshooting
+
+### `[FATAL] Non-parseable POM` — double dash in XML comment
+
+**Symptom:**
+```
+[FATAL] Non-parseable POM .../pom.xml: in comment after two dashes (--)
+next character must be > not w (position: END_TAG seen ...exec.args="install --w... @130:102)
+```
+The `Resolve Maven dependencies` step fails immediately; nothing else runs.
+
+**Root cause:**
+The XML specification (section 2.5) forbids the sequence `--` anywhere inside an XML comment except as the closing `-->`. Maven's POM parser enforces this strictly — a comment like:
+
+```xml
+<!-- usage: mvn exec:java -Dexec.args="install --with-deps" -->
+<!--                                               ^^ ILLEGAL  -->
+```
+
+causes a fatal parse error before Maven reads a single dependency. The build never starts.
+
+**Fix:**
+Rewrite any `pom.xml` comment that contains a CLI flag with double dashes. Either remove the example from the comment or rephrase it without the `--` sequence:
+
+```xml
+<!-- Before (broken) -->
+<!-- installs browsers: mvn exec:java -Dexec.args="install --with-deps" -->
+
+<!-- After (fixed) -->
+<!-- runs the Playwright CLI for browser installation.
+     See CI_CD_GUIDE.md for usage examples. -->
+```
+
+**Rule of thumb:** Never paste shell commands containing `--flags` into XML comments. Put them in a `README`, a guide, or a code-level string constant instead.
+
+---
 
 ### Browsers fail to launch in CI
 

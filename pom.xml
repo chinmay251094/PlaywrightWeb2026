@@ -126,8 +126,8 @@
                 </configuration>
             </plugin>
 
-            <!-- exec-maven-plugin — installs Playwright browsers in CI and locally:
-                 mvn exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install --with-deps" -->
+            <!-- exec-maven-plugin — runs the Playwright CLI for browser installation.
+                 See CI_CD_GUIDE.md "Running Tests" section for usage examples. -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
