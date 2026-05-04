@@ -18,6 +18,11 @@ pipeline {
     //   agent { docker { image 'playwright-tests' } }
     agent any
 
+    // Maven-3.9 is auto-installed by Jenkins on first use (configured via Tools)
+    tools {
+        maven 'Maven-3.9'
+    }
+
     // ── Build parameters (shown in "Build with Parameters" UI) ───────────────
     parameters {
         choice(
