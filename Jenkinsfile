@@ -101,19 +101,12 @@ pipeline {
         // downloading (~300 MB each). On the first run they are always downloaded.
         stage('Install Playwright Browsers') {
             steps {
+                // System dependencies are pre-installed in the Jenkins container image.
+                // We only download browser binaries here (no --with-deps needed).
                 sh '''
-                    if [ -d "${PLAYWRIGHT_BROWSERS_PATH}" ] && \
-                       [ "$(ls -A ${PLAYWRIGHT_BROWSERS_PATH})" ]; then
-                        echo "Browser binaries found in workspace cache — installing system deps only."
-                        mvn -q --no-transfer-progress exec:java \
-                          -Dexec.mainClass=com.microsoft.playwright.CLI \
-                          -Dexec.args="install-deps"
-                    else
-                        echo "No cached binaries found — downloading browsers and system deps."
-                        mvn -q --no-transfer-progress exec:java \
-                          -Dexec.mainClass=com.microsoft.playwright.CLI \
-                          -Dexec.args="install --with-deps"
-                    fi
+                    mvn -q --no-transfer-progress exec:java \
+                      -Dexec.mainClass=com.microsoft.playwright.CLI \
+                      -Dexec.args="install chromium"
                 '''
             }
         }
