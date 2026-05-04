@@ -134,7 +134,12 @@ public final class PlaywrightFactory {
         BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
                 .setHeadless(headless)
                 .setSlowMo(0) // set >0 for visual debugging
-                .setArgs(List.of("--no-sandbox", "--disable-dev-shm-usage"));
+                .setArgs(List.of(
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        // Prevents sites from detecting headless mode via navigator.webdriver
+                        "--disable-blink-features=AutomationControlled"
+                ));
 
         return switch (browserName.toLowerCase()) {
             case AppConstants.BROWSER_FIREFOX -> playwright.firefox().launch(launchOptions);

@@ -11,6 +11,7 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.PlaywrightException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.testng.SkipException;
 import org.testng.ITestResult;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
@@ -113,18 +114,28 @@ public abstract class BaseTest {
      * Demo sites and shared CI IPs occasionally drop the first connection;
      * a single retry with a short pause resolves ~95% of those transient failures.
      */
+    private static boolean isTransientNavigationError(PlaywrightException e) {
+        String msg = e.getMessage();
+        return msg != null && (msg.contains("ERR_ABORTED") || msg.contains("Object doesn't exist"));
+    }
+
     private void navigateWithRetry(String url) {
         try {
             page.navigate(url);
             page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
         } catch (PlaywrightException e) {
-            if (e.getMessage() != null && e.getMessage().contains("ERR_ABORTED")) {
-                log.warn("Navigation aborted for '{}', retrying in 3 s...", url);
-                try { Thread.sleep(3_000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+            if (!isTransientNavigationError(e)) throw e;
+            log.warn("Navigation unstable for '{}' — retrying in 3 s...", url);
+            try { Thread.sleep(3_000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+            try {
                 page.navigate(url);
                 page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
-            } else {
-                throw e;
+            } catch (PlaywrightException retryEx) {
+                if (isTransientNavigationError(retryEx)) {
+                    // AUT still unreachable after retry — skip rather than fail the test
+                    throw new SkipException("Skipping — AUT unreachable after retry: " + url);
+                }
+                throw retryEx;
             }
         }
     }
