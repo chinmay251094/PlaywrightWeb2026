@@ -1,0 +1,128 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Nightly Regression — Cross-Browser
+#
+# Runs the full regression suite across all three browsers every night at 2 AM
+# UTC. Triggered automatically by cron or manually via workflow_dispatch.
+#
+# Each browser runs in a separate parallel job so failures in one browser do
+# not block the other two. All artifacts are retained for 30 days.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Nightly — Cross-Browser Regression
+
+on:
+  schedule:
+    - cron: "0 2 * * *"    # 02:00 UTC every day
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: false
+        default: "qa"
+        type: choice
+        options: [qa, uat]
+      thread_count:
+        description: "Parallel thread count per browser"
+        required: false
+        default: "4"
+
+env:
+  JAVA_VERSION: "17"
+  MAVEN_OPTS: "-Xmx2g -XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+
+jobs:
+  nightly-regression:
+    name: Nightly — ${{ matrix.browser }}
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false           # all browsers must finish regardless
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: nightly-pw-${{ matrix.browser }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            nightly-pw-${{ matrix.browser }}-
+            pw-${{ matrix.browser }}-
+
+      - name: Resolve Maven dependencies
+        run: mvn dependency:resolve -q --no-transfer-progress
+
+      - name: Install Playwright browsers (cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: |
+          mvn -q --no-transfer-progress exec:java \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            -Dexec.args="install --with-deps ${{ matrix.browser }}"
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      - name: Install Playwright system dependencies (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: |
+          mvn -q --no-transfer-progress exec:java \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            -Dexec.args="install-deps ${{ matrix.browser }}"
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      - name: Run nightly regression
+        run: |
+          ENV="${{ github.event.inputs.environment || 'qa' }}"
+          THREADS="${{ github.event.inputs.thread_count || '4' }}"
+          mvn test -P "regression,${ENV}" \
+            -Dbrowser=${{ matrix.browser }} \
+            -Dheadless=true \
+            -Dthread.count="${THREADS}" \
+            --no-transfer-progress
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      # ── Capture all test output regardless of pass/fail ───────────────────
+      - name: Upload nightly artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-${{ matrix.browser }}-${{ github.run_id }}
+          path: |
+            test-output/
+            target/surefire-reports/
+          retention-days: 30
+
+      # ── Annotate the workflow summary with a pass/fail count ──────────────
+      - name: Post test summary
+        if: always()
+        run: |
+          TOTAL=$(find target/surefire-reports -name "*.xml" 2>/dev/null | \
+            xargs grep -h 'tests=' 2>/dev/null | \
+            grep -oP 'tests="\K[0-9]+' | \
+            awk '{s+=$1} END{print s+0}')
+          FAIL=$(find target/surefire-reports -name "*.xml" 2>/dev/null | \
+            xargs grep -h 'failures=' 2>/dev/null | \
+            grep -oP 'failures="\K[0-9]+' | \
+            awk '{s+=$1} END{print s+0}')
+          ERROR=$(find target/surefire-reports -name "*.xml" 2>/dev/null | \
+            xargs grep -h 'errors=' 2>/dev/null | \
+            grep -oP 'errors="\K[0-9]+' | \
+            awk '{s+=$1} END{print s+0}')
+          echo "### Nightly — ${{ matrix.browser }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tests | Failures | Errors |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|----------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ${TOTAL} | ${FAIL} | ${ERROR} |" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,223 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CI Pipeline — Playwright TestNG Hybrid Framework
+#
+# Triggers:
+#   • push / PR  →  main, develop   (compile + smoke on Chromium)
+#   • merge to main                 →  full regression, 3-browser matrix
+#   • workflow_dispatch             →  manual run with selectable suite/browser
+#
+# Flow:
+#   smoke ──────────────────────────────── (every push / PR)
+#   regression [chromium|firefox|webkit] ─ (merge to main only, parallel)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI — Playwright TestNG
+
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  pull_request:
+    branches: [main, develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Test suite"
+        required: false
+        default: "smoke"
+        type: choice
+        options: [smoke, regression]
+      browser:
+        description: "Browser"
+        required: false
+        default: "chromium"
+        type: choice
+        options: [chromium, firefox, webkit]
+      environment:
+        description: "Target environment"
+        required: false
+        default: "qa"
+        type: choice
+        options: [qa, uat]
+
+# Cancel in-flight runs on the same branch when a newer push arrives
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  # Tune JVM: fast class loading, limit heap so multiple parallel jobs fit in memory
+  MAVEN_OPTS: "-Xmx2g -XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+  # Store Playwright browser binaries in the workspace so they survive the cache step
+  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 1 — Smoke (fast gate, every push / PR)
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  smoke:
+    name: Smoke — ${{ github.event.inputs.browser || 'chromium' }}
+    runs-on: ubuntu-22.04
+
+    steps:
+      # ── Source ────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Java + Maven dep cache ─────────────────────────────────────────────
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven            # caches ~/.m2 keyed on pom.xml hash
+
+      # ── Playwright browser binary cache ───────────────────────────────────
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          # Key includes Playwright version from pom.xml hash so cache
+          # is invalidated whenever the playwright dependency changes.
+          key: pw-chromium-${{ hashFiles('**/pom.xml') }}
+          restore-keys: pw-chromium-
+
+      # ── Browser installation ───────────────────────────────────────────────
+      # On cache miss  → download binaries + install OS packages (apt)
+      # On cache hit   → install OS packages only (binaries already cached)
+      - name: Resolve Maven dependencies
+        run: mvn dependency:resolve -q --no-transfer-progress
+
+      - name: Install Playwright browsers (cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: |
+          mvn -q --no-transfer-progress exec:java \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            -Dexec.args="install --with-deps chromium"
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      - name: Install Playwright system dependencies (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: |
+          mvn -q --no-transfer-progress exec:java \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            -Dexec.args="install-deps chromium"
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      # ── Run smoke suite ────────────────────────────────────────────────────
+      - name: Run smoke tests
+        run: |
+          SUITE="${{ github.event.inputs.suite || 'smoke' }}"
+          BROWSER="${{ github.event.inputs.browser || 'chromium' }}"
+          ENV="${{ github.event.inputs.environment || 'qa' }}"
+          mvn test -P "${SUITE},${ENV}" \
+            -Dbrowser="${BROWSER}" \
+            -Dheadless=true \
+            --no-transfer-progress
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      # ── Artifacts ─────────────────────────────────────────────────────────
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-failure-${{ github.run_id }}
+          path: |
+            test-output/screenshots/
+            test-output/logs/
+            target/surefire-reports/
+          retention-days: 7
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report-${{ github.run_id }}
+          path: test-output/reports/
+          retention-days: 14
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 2 — Full Regression matrix (merge to main only)
+# Runs chromium / firefox / webkit in parallel; fail-fast disabled so all
+# browsers produce artifacts even when one fails.
+# ─────────────────────────────────────────────────────────────────────────────
+  regression:
+    name: Regression — ${{ matrix.browser }}
+    runs-on: ubuntu-22.04
+    needs: smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: pw-${{ matrix.browser }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: pw-${{ matrix.browser }}-
+
+      - name: Resolve Maven dependencies
+        run: mvn dependency:resolve -q --no-transfer-progress
+
+      - name: Install Playwright browsers (cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: |
+          mvn -q --no-transfer-progress exec:java \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            -Dexec.args="install --with-deps ${{ matrix.browser }}"
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      - name: Install Playwright system dependencies (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: |
+          mvn -q --no-transfer-progress exec:java \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            -Dexec.args="install-deps ${{ matrix.browser }}"
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      - name: Run regression suite
+        run: |
+          mvn test -P regression,qa \
+            -Dbrowser=${{ matrix.browser }} \
+            -Dheadless=true \
+            -Dthread.count=4 \
+            --no-transfer-progress
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+
+      - name: Upload regression artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-${{ matrix.browser }}-${{ github.run_id }}
+          path: |
+            test-output/
+            target/surefire-reports/
+          retention-days: 30

@@ -1,0 +1,39 @@
+# Build output — rebuilt inside the container
+target/
+
+# Test output — written at runtime; mount as a volume to retrieve
+test-output/
+
+# IDE metadata
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Git
+.git/
+.gitignore
+
+# CI config — not needed inside the container
+.github/
+
+# Local env overrides
+*.env
+.env
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Maven wrapper (not used in the Dockerfile)
+.mvn/
+mvnw
+mvnw.cmd
+
+# Documentation
+docs/
+CI_CD_GUIDE.md
+README.md
+
+# Scripts — not needed inside the container
+scripts/
