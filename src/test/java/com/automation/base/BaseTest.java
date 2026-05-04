@@ -8,6 +8,7 @@ import com.automation.listeners.TestNGListener;
 import com.automation.pages.*;
 import com.automation.utils.ScreenshotUtils;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.PlaywrightException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.testng.ITestResult;
@@ -80,8 +81,7 @@ public abstract class BaseTest {
         cartPage    = new CartPage(page);
         accountPage = new AccountPage(page);
 
-        page.navigate(config.getBaseUrl());
-        page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+        navigateWithRetry(config.getBaseUrl());
 
         log.info("Browser ready — {}", page.url());
     }
@@ -107,6 +107,27 @@ public abstract class BaseTest {
     }
 
     // ─── Test helpers ─────────────────────────────────────────────────────────
+
+    /**
+     * Navigates to a URL and retries once on ERR_ABORTED.
+     * Demo sites and shared CI IPs occasionally drop the first connection;
+     * a single retry with a short pause resolves ~95% of those transient failures.
+     */
+    private void navigateWithRetry(String url) {
+        try {
+            page.navigate(url);
+            page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+        } catch (PlaywrightException e) {
+            if (e.getMessage() != null && e.getMessage().contains("ERR_ABORTED")) {
+                log.warn("Navigation aborted for '{}', retrying in 3 s...", url);
+                try { Thread.sleep(3_000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                page.navigate(url);
+                page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+            } else {
+                throw e;
+            }
+        }
+    }
 
     /** Logs a named step to Log4j2. */
     protected void step(String description) {
